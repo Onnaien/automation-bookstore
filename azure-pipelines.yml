@@ -4,14 +4,52 @@
 # https://aka.ms/yaml
 
 trigger:
-- master
+  - master
 
-pool:
-  vmImage: ubuntu-latest
+  stages:
+    - stage: Build
+      jobs:
+        - job: BuildWebApp
+          pool:
+            vmImage: ubuntu-latest
+          steps:
+          - task: ArchiveFiles@2
+            inputs:
+              rootFolderOrFile: '$(build.sourcesDirectory)'
+              includeRootFolder: false
+          - task: PublishBuildArtifacts@1
 
-steps:
-- task: ArchiveFiles@2
-  inputs:
-    rootFolderOrFile: '$(build.sourcesDirectory)'
-    includeRootFolder: false
-- task: PublishBuildArtifacts@1
+    - stage: Dev
+      jobs:
+        - job: Deploy
+          pool:
+            vmImage: ubuntu-latest
+          steps:
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'drop'
+              downloadPath: '$(System.DefaultWorkingDirectory)'
+          - task: AzureRmWebAppDeployment@4
+            inputs:
+              ConnectionType: 'AzureRM'
+              azureSubscription: 'Onnaien(4dea2cea-2237-4e93-81b7-5b36e58df06c)'
+              appType: 'webApp'
+              WebAppName: 'githubci-web-mortenundheim'
+              packageForLinux: '$(System.DefaultWorkingDirectory)/**/*.zip'
+        - job: Test
+          dependsOn: Deploy
+          strategy:
+            matrix:
+              Chrome:
+                Browser: chrome
+              Firefox:
+                Browser: firefox
+            maxParallel: 2
+          pool:
+            vmImage: ubuntu-latest
+          steps:
+            - template: steps_test.yml
+              parameters:
+                  url: 'https://abookstore.azurewebsites.net'
